@@ -22,6 +22,11 @@ namespace hlm2_wad_extract
     {
         static void Extract(string filename)
         {
+            Extract(filename, "."); // Set the current directory as the output directory
+        }
+
+        static void Extract(string filename, string outputdir)
+        {
             using (var wad = new BinaryReader(File.Open(filename, FileMode.Open)))
             {
                 var hdr = new Header();
@@ -47,9 +52,10 @@ namespace hlm2_wad_extract
                 // file data
                 foreach (var file in files)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(file.Name));
+                    var name = outputdir + Path.DirectorySeparatorChar + Path.GetDirectoryName(file.Name) + Path.DirectorySeparatorChar + Path.GetFileName(file.Name);
+                    Directory.CreateDirectory(Path.GetDirectoryName(name));
 
-                    using (var of = new BinaryWriter(File.Open(file.Name, FileMode.Create)))
+                    using (var of = new BinaryWriter(File.Open(name, FileMode.Create)))
                     {
                         of.Write(wad.ReadBytes((int)file.FileLength));
                     }
@@ -61,11 +67,17 @@ namespace hlm2_wad_extract
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: {0} [FILE]", AppDomain.CurrentDomain.FriendlyName);
+                Console.WriteLine("Usage: {0} [FILE] [OUTPUT DIRECTORY]\nIf omitted, the output directory defaults to the current directory", AppDomain.CurrentDomain.FriendlyName);
                 return 1;
             }
+            else if (args.Length == 1)
+            {
+                Extract(args[0]);
+                return 0;
+            }
 
-            Extract(args[0]);
+            Extract(args[0], args[1]);
+
             return 0;
         }
     }
