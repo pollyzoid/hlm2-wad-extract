@@ -57,26 +57,100 @@ namespace hlm2_wad_extract
 
                     using (var of = new BinaryWriter(File.Open(name, FileMode.Create)))
                     {
+                        Console.WriteLine(file.Name);
                         of.Write(wad.ReadBytes((int)file.FileLength));
                     }
                 }
             }
         }
+        static Int64 currentoffset = 0;
+        static List<FileHeader> WalkDirectory(DirectoryInfo dir, DirectoryInfo basedir = null)
+        {
+            // basedir is set to the value of dir on the first iteration, but stays the same on the following iterations
+            if (basedir == null)
+                basedir = dir;
+
+            var files = new List<FileHeader>();
+            
+            foreach (var file in dir.GetFiles())
+            {
+                var fhdr = new FileHeader();
+                // Remove the base directory from the path, leaving a short path relative to the input directory specified by the user
+                fhdr.Name = file.FullName.Remove(0, basedir.FullName.Length + 1);
+                fhdr.NameLength = fhdr.Name.Length;
+                fhdr.FileLength = file.Length;
+                fhdr.FileOffset = currentoffset;
+
+                currentoffset += file.Length;
+
+                files.Add(fhdr);
+                
+            }
+
+            foreach (var subdir in dir.GetDirectories())
+            {
+                files.AddRange(WalkDirectory(subdir, basedir));
+            }
+
+            return files;
+        }
+
+        static void Create(string filename)
+        {
+            Create(filename, "."); // Set the current directory as the output directory
+        }
+        static void Create(string filename, string foldername)
+        {
+            var dirinfo = new DirectoryInfo(foldername);
+            var files = WalkDirectory(dirinfo);
+            var relativepaths = new List<string>();
+
+            using(var wad = new BinaryWriter(File.Open(filename, FileMode.Create)))
+            {
+                wad.Write((Int32)files.Count);
+
+                foreach (var file in files)
+                {
+                    wad.Write((Int32)file.NameLength);
+                    wad.Write(Encoding.ASCII.GetBytes(file.Name.Replace('\\', '/')));
+                    wad.Write((Int64)file.FileLength);
+                    wad.Write((Int64)file.FileOffset);
+                }
+
+                foreach (var file in files)
+                {
+                    var reader = new BinaryReader(File.Open(foldername + Path.DirectorySeparatorChar + file.Name, FileMode.Open));
+                    wad.Write(reader.ReadBytes((int)file.FileLength));
+                    
+                }
+                
+            }
+        }
 
         static int Main(string[] args)
         {
-            if (args.Length == 0)
+            if (args.Length == 0 || args.Length == 1)
             {
-                Console.WriteLine("Usage: {0} [FILE] [OUTPUT DIRECTORY]\nIf omitted, the output directory defaults to the current directory", AppDomain.CurrentDomain.FriendlyName);
+                Console.WriteLine("Usage: {0} [-e|-c] [FILE] [DIRECTORY]\n" + 
+                                  "If omitted, the output directory defaults to the current directory\n", AppDomain.CurrentDomain.FriendlyName);
                 return 1;
             }
-            else if (args.Length == 1)
-            {
-                Extract(args[0]);
-                return 0;
-            }
 
-            Extract(args[0], args[1]);
+            //TODO: add error checking for the command line args, add more option(e.g. -o for output)
+
+            switch (args[0])
+            {
+                case "-c":
+                case "--create":
+                    Create(args[1], args[2]);
+                    break;
+                case "-e":
+                case "--extract":
+                    Extract(args[1], args[2]);
+                    break;
+                default:
+                    return 1;
+            }
 
             return 0;
         }
